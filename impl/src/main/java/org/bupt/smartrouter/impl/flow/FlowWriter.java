@@ -193,12 +193,8 @@ public class FlowWriter {
 				.build())
 				.build())
 				.setIpMatch(new IpMatchBuilder()
-				.setIpProtocol((short)socket.getProtocol().getIntValue())
-				.build())
-				.setLayer3Match(new Ipv4MatchBuilder()
-				.setIpv4Source(new Ipv4Prefix(socket.getSrcAddress().getValue()+"/32"))
-				.setIpv4Destination(new Ipv4Prefix(socket.getDestAddress().getValue()+"/32"))
-				.build());
+						.setIpProtocol((short)socket.getProtocol().getIntValue())
+						.build());
 		MatchBuilder reMatchBuilder=new MatchBuilder()
 				.setEthernetMatch(new EthernetMatchBuilder()
 				.setEthernetSource(new EthernetSourceBuilder().setAddress(socket.getDestMac()).build())
@@ -208,33 +204,8 @@ public class FlowWriter {
 				.build())
 				.build())
 				.setIpMatch(new IpMatchBuilder()
-				.setIpProtocol((short)socket.getProtocol().getIntValue())
-				.build())
-				.setLayer3Match(new Ipv4MatchBuilder()
-				.setIpv4Source(new Ipv4Prefix(socket.getDestAddress().getValue()+"/32"))
-				.setIpv4Destination(new Ipv4Prefix(socket.getSrcAddress().getValue()+"/32"))
-				.build());
-		if(socket.getProtocol()==KnownIpProtocols.Tcp){
-			matchBuilder.setLayer4Match(new TcpMatchBuilder()
-						.setTcpSourcePort(new PortNumber(socket.getSrcPort()))
-						.setTcpDestinationPort(new PortNumber(socket.getDestPort()))
+						.setIpProtocol((short)socket.getProtocol().getIntValue())
 						.build());
-			reMatchBuilder.setLayer4Match(new TcpMatchBuilder()
-						.setTcpSourcePort(new PortNumber(socket.getDestPort()))
-						.setTcpDestinationPort(new PortNumber(socket.getDestPort()))
-						.build());
-		}
-		else if (socket.getProtocol()==KnownIpProtocols.Udp) {
-			matchBuilder.setLayer4Match(new UdpMatchBuilder()
-					//.setUdpSourcePort(new PortNumber(socket.getSrcPort()))
-					.setUdpDestinationPort(new PortNumber(socket.getDestPort()))
-					.build());
-			reMatchBuilder.setLayer4Match(new UdpMatchBuilder()
-					.setUdpSourcePort(new PortNumber(socket.getDestPort()))
-					//.setUdpDestinationPort(new PortNumber(socket.getSrcPort()))
-					.build());
-		}
-	 
 		if(MyUtil.inTheSameNode(ingress, egress)){
 			Match match=matchBuilder.setInPort(ingress).build();
 			Match reMatch=reMatchBuilder.setInPort(egress).build();
@@ -288,46 +259,25 @@ public class FlowWriter {
 				.build())
 				.setIpMatch(new IpMatchBuilder()
 				.setIpProtocol((short)socket.getProtocol().getIntValue())
-				.build())
-				.setLayer3Match(new Ipv4MatchBuilder()
-				.setIpv4Source(new Ipv4Prefix(socket.getSrcAddress().getValue()+"/32"))
-				.setIpv4Destination(new Ipv4Prefix(socket.getDestAddress().getValue()+"/32"))
 				.build());
-		
-				
-		
-		if(socket.getProtocol()==KnownIpProtocols.Tcp){
-			matchBuilder.setLayer4Match(new TcpMatchBuilder()
-						.setTcpSourcePort(new PortNumber(socket.getSrcPort()))
-						.setTcpDestinationPort(new PortNumber(socket.getDestPort()))
-						.build());
+		if(MyUtil.inTheSameNode(ingress, egress)){
+				Match match=matchBuilder.setInPort(ingress).build();
+				addInnerFlow(match,MyUtil.getNodeId(ingress),egress,isTemp);
+				return;
+			}
+		NodeConnectorId inport=ingress;
+		if(path!=null){
+			for(int i=index;i<path.size();i++){
+				Link link=path.get(i);
+				Match match=matchBuilder.setInPort(inport).build();
+				addInnerFlow(match,link.getSource().getSourceNode(),new NodeConnectorId(link.getSource().getSourceTp().getValue()), isTemp);
+				inport=new NodeConnectorId(link.getDestination().getDestTp().getValue());
+			}
 		}
-		else if (socket.getProtocol()==KnownIpProtocols.Udp) {
-			matchBuilder.setLayer4Match(new UdpMatchBuilder()
-					.setUdpSourcePort(new PortNumber(socket.getSrcPort()))
-					.setUdpDestinationPort(new PortNumber(socket.getDestPort()))
-					.build());
-		}
-		 
-				
-				if(MyUtil.inTheSameNode(ingress, egress)){
-					Match match=matchBuilder.setInPort(ingress).build();
-					addInnerFlow(match,MyUtil.getNodeId(ingress),egress,isTemp);
-					return;
-				}
-				NodeConnectorId inport=ingress;
-				if(path!=null){
-					for(int i=index;i<path.size();i++){
-						Link link=path.get(i);
-						Match match=matchBuilder.setInPort(inport).build();
-						addInnerFlow(match,link.getSource().getSourceNode(),new NodeConnectorId(link.getSource().getSourceTp().getValue()), isTemp);
-						inport=new NodeConnectorId(link.getDestination().getDestTp().getValue());
-					}
-				}
-				if(path!=null && path.size()!=0){
-					Match match=matchBuilder.setInPort(inport).build();
-					addInnerFlow(match, path.get(path.size()-1).getDestination().getDestNode(),egress, isTemp);
-				}	
+		if(path!=null && path.size()!=0){
+			Match match=matchBuilder.setInPort(inport).build();
+			addInnerFlow(match, path.get(path.size()-1).getDestination().getDestNode(),egress, isTemp);
+		}			
 	}
 	/**
 	 * 
@@ -346,13 +296,10 @@ public class FlowWriter {
 				.setType(new EtherType(2048l))
 				.build())
 				.build())
-		 		.setIpMatch(new IpMatchBuilder()
+				.setIpMatch(new IpMatchBuilder()
 				.setIpProtocol((short)socket.getProtocol().getIntValue())
-				.build())	
-				.setLayer3Match(new Ipv4MatchBuilder()
-				.setIpv4Source(new Ipv4Prefix(socket.getSrcAddress().getValue()+"/32"))
-				.setIpv4Destination(new Ipv4Prefix(socket.getDestAddress().getValue()+"/32"))
-				.build());			
+				.build());
+		 			
 		MatchBuilder reMatchBuilder=new MatchBuilder()
 				.setEthernetMatch(new EthernetMatchBuilder()
 				.setEthernetSource(new EthernetSourceBuilder().setAddress(socket.getDestMac()).build())
@@ -363,32 +310,7 @@ public class FlowWriter {
 				.build())
 				.setIpMatch(new IpMatchBuilder()
 				.setIpProtocol((short)socket.getProtocol().getIntValue())
-				.build())
-				.setLayer3Match(new Ipv4MatchBuilder()
-				.setIpv4Source(new Ipv4Prefix(socket.getDestAddress().getValue()+"/32"))
-				.setIpv4Destination(new Ipv4Prefix(socket.getSrcAddress().getValue()+"/32"))
 				.build());
-		if(socket.getProtocol()==KnownIpProtocols.Tcp){
-			matchBuilder.setLayer4Match(new TcpMatchBuilder()
-						.setTcpSourcePort(new PortNumber(socket.getSrcPort()))
-						.setTcpDestinationPort(new PortNumber(socket.getDestPort()))
-						.build());
-			reMatchBuilder.setLayer4Match(new TcpMatchBuilder()
-						  .setTcpSourcePort(new PortNumber(socket.getDestPort()))
-						  .setTcpDestinationPort(new PortNumber(socket.getSrcPort()))
-						  .build());
-		}
-		else if (socket.getProtocol()==KnownIpProtocols.Udp) {
-			matchBuilder.setLayer4Match(new UdpMatchBuilder()
-					.setUdpSourcePort(new PortNumber(socket.getSrcPort()))
-					.setUdpDestinationPort(new PortNumber(socket.getDestPort()))
-					.build());
-			reMatchBuilder.setLayer4Match(new UdpMatchBuilder()
-					.setUdpSourcePort(new PortNumber(socket.getDestPort()))
-					.setUdpDestinationPort(new PortNumber(socket.getSrcPort()))
-					.build());
-		}
-		 
 		Match match=matchBuilder.setInPort(ingress).build();
 		addBranchFlow(match, egress1, egress2, nodeId);
 		Match revmatch=reMatchBuilder.setInPort(egress1).build();

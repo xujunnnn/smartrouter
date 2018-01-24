@@ -15,11 +15,11 @@ module SmartRouter-config {
     container SmartRouter-config {
     	leaf serverNode{
     		type string;
-    		default "openflow:7";
+    		default "openflow:2";
     	}
     	leaf serverNodeConnector{
     		type string;
-    		default "openflow:7:2";
+    		default "openflow:2:5";
     	}
         leaf flow-table-id {
             type uint8;
@@ -31,11 +31,11 @@ module SmartRouter-config {
         }
         leaf temp-flow-hard-timeout {     
             type uint16;
-            default 2;
+            default 0;
         }
         leaf temp-flow-idle-timeout {
             type uint16;
-            default 0;
+            default 10;
         }
         leaf dispatch-flow-priority {
             type uint16;
@@ -59,11 +59,11 @@ module SmartRouter-config {
         }
         leaf flow-idle-timeout {
             type uint16;
-            default 1000;
+            default 100;
         }
         leaf flow-installation-delay {
             type uint32;
-            default 20;
+            default 2;
         }
     }
 }
