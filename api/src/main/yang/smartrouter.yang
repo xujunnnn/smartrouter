@@ -1,0 +1,9 @@
+module smartrouter {
+    yang-version 1;
+    namespace "urn:opendaylight:params:xml:ns:yang:smartrouter";
+    prefix "smartrouter";
+
+    revision "2015-01-05" {
+        description "Initial revision of smartrouter model";
+    }
+}

@@ -1,0 +1,69 @@
+module SmartRouter-config {
+
+    yang-version 1;
+    namespace "urn:opendaylight:packet:SmartRouter-config";
+    prefix "SmartRouter-config";
+
+    description
+        "This module contains the base configuration for SmartRouter-impl
+        implementation.";
+
+    revision 2014-05-28 {
+        description "Initial revision.";
+    }
+
+    container SmartRouter-config {
+    	leaf serverNode{
+    		type string;
+    		default "openflow:7";
+    	}
+    	leaf serverNodeConnector{
+    		type string;
+    		default "openflow:7:2";
+    	}
+        leaf flow-table-id {
+            type uint8;
+            default 0;
+        }
+        leaf temp-flow-priority {
+            type uint16;
+            default 25;
+        }
+        leaf temp-flow-hard-timeout {     
+            type uint16;
+            default 2;
+        }
+        leaf temp-flow-idle-timeout {
+            type uint16;
+            default 0;
+        }
+        leaf dispatch-flow-priority {
+            type uint16;
+            default 30;
+        }
+        leaf dispatch-flow-hard-timeout {
+            type uint16;
+            default 0;
+        }
+        leaf dispatch-flow-idle-timeout {
+            type uint16;
+            default 100;
+        }
+        leaf flow-priority {
+            type uint16;
+            default 20;
+        }
+        leaf flow-hard-timeout {
+            type uint16;
+            default 0;
+        }
+        leaf flow-idle-timeout {
+            type uint16;
+            default 1000;
+        }
+        leaf flow-installation-delay {
+            type uint32;
+            default 20;
+        }
+    }
+}
