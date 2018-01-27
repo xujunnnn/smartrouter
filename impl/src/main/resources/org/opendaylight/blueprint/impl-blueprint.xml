@@ -19,6 +19,8 @@ and is available at http://www.eclipse.org/legal/epl-v10.html
     interface="org.opendaylight.yang.gen.v1.urn.opendaylight.flow.service.rev130819.SalFlowService" />
       <reference id="notificationProviderService"
     interface="org.opendaylight.controller.sal.binding.api.NotificationProviderService" />
+      <odl:rpc-service id="packetHandlerService"
+    interface="org.opendaylight.yang.gen.v1.urn.opendaylight.packet.service.rev130709.PacketProcessingService" />
       <odl:clustered-app-config id="smartRouterConfig"
     binding-class="org.opendaylight.yang.gen.v1.urn.opendaylight.packet.smartrouter.config.rev140528.SmartRouterConfig">
   </odl:clustered-app-config>
@@ -29,6 +31,7 @@ and is available at http://www.eclipse.org/legal/epl-v10.html
     <argument ref="dataBroker" />
     <argument ref="salFlowService" />
     <argument ref="notificationProviderService" />
+     <argument ref="packetHandlerService" />
     <argument ref="smartRouterConfig"/>
   </bean>
 

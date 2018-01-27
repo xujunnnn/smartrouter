@@ -19,7 +19,10 @@ import org.opendaylight.l2switch.packethandler.decoders.utils.BufferException;
 import org.opendaylight.l2switch.packethandler.decoders.utils.NetUtils;
 import org.opendaylight.yang.gen.v1.urn.ietf.params.xml.ns.yang.ietf.inet.types.rev130715.Dscp;
 import org.opendaylight.yang.gen.v1.urn.opendaylight.inventory.rev130819.NodeConnectorId;
+import org.opendaylight.yang.gen.v1.urn.opendaylight.inventory.rev130819.NodeConnectorRef;
+import org.opendaylight.yang.gen.v1.urn.opendaylight.inventory.rev130819.NodeRef;
 import org.opendaylight.yang.gen.v1.urn.opendaylight.inventory.rev130819.node.NodeConnector;
+import org.opendaylight.yang.gen.v1.urn.opendaylight.inventory.rev130819.nodes.Node;
 import org.opendaylight.yang.gen.v1.urn.opendaylight.packet.basepacket.rev140528.packet.chain.grp.PacketChain;
 import org.opendaylight.yang.gen.v1.urn.opendaylight.packet.basepacket.rev140528.packet.chain.grp.packet.chain.packet.RawPacket;
 import org.opendaylight.yang.gen.v1.urn.opendaylight.packet.ethernet.rev140528.ethernet.packet.received.packet.chain.packet.EthernetPacket;
@@ -27,13 +30,18 @@ import org.opendaylight.yang.gen.v1.urn.opendaylight.packet.ipv4.rev140528.Ipv4P
 import org.opendaylight.yang.gen.v1.urn.opendaylight.packet.ipv4.rev140528.Ipv4PacketReceived;
 import org.opendaylight.yang.gen.v1.urn.opendaylight.packet.ipv4.rev140528.KnownIpProtocols;
 import org.opendaylight.yang.gen.v1.urn.opendaylight.packet.ipv4.rev140528.ipv4.packet.received.packet.chain.packet.Ipv4Packet;
+import org.opendaylight.yang.gen.v1.urn.opendaylight.packet.service.rev130709.PacketProcessingService;
+import org.opendaylight.yang.gen.v1.urn.opendaylight.packet.service.rev130709.TransmitPacketInput;
+import org.opendaylight.yang.gen.v1.urn.opendaylight.packet.service.rev130709.TransmitPacketInputBuilder;
 import org.opendaylight.yang.gen.v1.urn.tbd.params.xml.ns.yang.network.topology.rev131021.NodeId;
 import org.opendaylight.yang.gen.v1.urn.tbd.params.xml.ns.yang.network.topology.rev131021.network.topology.topology.Link;
+import org.opendaylight.yangtools.yang.binding.InstanceIdentifier;
 
 public class DispatchPacketProcessor implements Ipv4PacketListener{
 	private final NodeConnectorId serverNodeConnector;
 	private final TopoGraph topoGraph;
 	private final FlowWriter flowWriter;
+	private PacketProcessingService packetProcessingService;
 	private ExecutorService service;
 	public ExecutorService getService() {
 		return service;
@@ -46,6 +54,14 @@ public class DispatchPacketProcessor implements Ipv4PacketListener{
 		this.serverNodeConnector = serverNodeConnector;
 		this.topoGraph = topoGraph;
 		this.flowWriter = flowWriter;
+		this.packetProcessingService=packetProcessingService;
+	}
+	
+	public PacketProcessingService getPacketProcessingService() {
+		return packetProcessingService;
+	}
+	public void setPacketProcessingService(PacketProcessingService packetProcessingService) {
+		this.packetProcessingService = packetProcessingService;
 	}
 	@Override
 	public void onIpv4PacketReceived(Ipv4PacketReceived packetReceived) {
@@ -73,7 +89,6 @@ public class DispatchPacketProcessor implements Ipv4PacketListener{
         socket.setDestMac(ethernetPacket.getDestinationMac());
         socket.setSrcAddress(ipv4Packet.getSourceIpv4());
         socket.setDestAddress(ipv4Packet.getDestinationIpv4());
-        
         if(ipv4Packet.getProtocol()==KnownIpProtocols.Tcp){
         	socket.setProtocol(KnownIpProtocols.Tcp);
         	byte[] payload=packetReceived.getPayload();
@@ -83,7 +98,7 @@ public class DispatchPacketProcessor implements Ipv4PacketListener{
 				socket.setSrcPort(srcPort);
 				int destPort=BitBufferHelper.getInt(BitBufferHelper.getBits(payload, bitOffset+16, 16));
 				socket.setDestPort(destPort);
-				handlerSocket(socket, ipv4Packet.getDscp());
+				handlerSocket(payload,socket, ipv4Packet.getDscp());
 			} catch (BufferException e) {
 				// TODO Auto-generated catch block
 				e.printStackTrace();
@@ -99,7 +114,7 @@ public class DispatchPacketProcessor implements Ipv4PacketListener{
 				socket.setSrcPort(srcPort);
 				int destPort=BitBufferHelper.getInt(BitBufferHelper.getBits(payload, bitOffset+16, 16));
 				socket.setDestPort(destPort);
-				handlerSocket(socket, ipv4Packet.getDscp());
+				handlerSocket(payload,socket, ipv4Packet.getDscp());
 			} catch (BufferException e) {
 				// TODO Auto-generated catch block
 				e.printStackTrace();
@@ -111,7 +126,7 @@ public class DispatchPacketProcessor implements Ipv4PacketListener{
 	 * @param socket
 	 * @param dscp
 	 */
-	public void handlerSocket(Socket socket,Dscp dscp){
+	public void handlerSocket(byte[] payload,Socket socket,Dscp dscp){
 		NodeConnectorId srcnodeconnector=topoGraph.getAttachPoint(socket.getSrcMac());
 	 	NodeConnectorId dstnodeconnector=topoGraph.getAttachPoint(socket.getDestMac());
         if(srcnodeconnector==null ||dstnodeconnector==null)
@@ -120,7 +135,22 @@ public class DispatchPacketProcessor implements Ipv4PacketListener{
         NodeId dst=MyUtil.getNodeId(dstnodeconnector);
         RouterInfo routerInfo=topoGraph.getRouterInfo(src, dst);
         List<Link> path=routerInfo.getPath();
+        sendPacketOut(payload, MyUtil.getRef(srcnodeconnector), MyUtil.getRef(dstnodeconnector));
         flowWriter.installDispatchFlow(socket, path, srcnodeconnector, dstnodeconnector,dscp.getValue());
+	}
+	
+	public void sendPacketOut(byte[] payload,NodeConnectorRef ingress,NodeConnectorRef egress){
+		if(ingress==null ||egress==null){
+			return;
+		}
+		InstanceIdentifier<Node> egressNode=egress.getValue().firstIdentifierOf(Node.class);
+		TransmitPacketInput input=new TransmitPacketInputBuilder()
+				.setIngress(null)
+				.setEgress(egress)
+				.setNode(new NodeRef(egressNode))
+				.setPayload(payload)
+				.build();
+		packetProcessingService.transmitPacket(input);
 	}
 
 }

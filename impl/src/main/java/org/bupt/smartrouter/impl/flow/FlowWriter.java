@@ -209,12 +209,21 @@ public class FlowWriter {
 		if(MyUtil.inTheSameNode(ingress, egress)){
 			Match match=matchBuilder.setInPort(ingress).build();
 			Match reMatch=reMatchBuilder.setInPort(egress).build();
-			addInnerFlow(match,MyUtil.getNodeId(ingress),egress,isTemp);
 			addInnerFlow(reMatch, MyUtil.getNodeId(egress), ingress, isTemp);
+			addInnerFlow(match,MyUtil.getNodeId(ingress),egress,isTemp);
+			
 			return;
 		}
 		NodeConnectorId inport=ingress;
 		NodeConnectorId reinport=egress;
+		for(int i=path.size()-1;i>=0;i--){
+			Link link=path.get(i);
+			Match reMatch=reMatchBuilder.setInPort(reinport).build();
+			addInnerFlow(reMatch,link.getDestination().getDestNode(),new NodeConnectorId(link.getDestination().getDestTp().getValue()), isTemp);
+			reinport=new NodeConnectorId(link.getSource().getSourceTp().getValue());
+		}
+		Match reMatch=reMatchBuilder.setInPort(reinport).build();
+		addInnerFlow(reMatch, path.get(0).getSource().getSourceNode(), ingress, isTemp);
 		if(path!=null){
 			for(Link link:path){
 				Match match=matchBuilder.setInPort(inport).build();
@@ -226,15 +235,6 @@ public class FlowWriter {
 			Match match=matchBuilder.setInPort(inport).build();
 			addInnerFlow(match, path.get(path.size()-1).getDestination().getDestNode(),egress, isTemp);
 		}	
-		
-		for(int i=path.size()-1;i>=0;i--){
-			Link link=path.get(i);
-			Match reMatch=matchBuilder.setInPort(reinport).build();
-			addInnerFlow(reMatch,link.getDestination().getDestNode(),new NodeConnectorId(link.getDestination().getDestTp().getValue()), isTemp);
-			inport=new NodeConnectorId(link.getSource().getSourceTp().getValue());
-		}
-		Match reMatch=matchBuilder.setInPort(reinport).build();
-		addInnerFlow(reMatch, path.get(0).getSource().getSourceNode(), ingress, isTemp);
 	}
 	/**
 	 * 
@@ -397,11 +397,11 @@ public class FlowWriter {
 			if(path!=null && path.size()!=0){
 				for(int i=path.size()-1;i>=0;i--){
 					Link link=path.get(i);
-					Match reMatch=matchBuilder.setInPort(reinport).build();
+					Match reMatch=reMatchBuilder.setInPort(reinport).build();
 					addDispatchFlow(reMatch, new NodeConnectorId(link.getDestination().getDestTp().getValue()), queue, link.getDestination().getDestNode());
 					inport=new NodeConnectorId(link.getSource().getSourceTp().getValue());
 				}
-				Match reMatch=matchBuilder.setInPort(reinport).build();
+				Match reMatch=reMatchBuilder.setInPort(reinport).build();
 				addDispatchFlow(reMatch, ingress, queue, path.get(0).getSource().getSourceNode());
 			}
 			
