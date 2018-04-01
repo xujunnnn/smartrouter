@@ -100,43 +100,31 @@ public class PacketProcessor implements Ipv4PacketListener{
         if (rawPacket == null || ethernetPacket == null || ipv4Packet == null) {
             return;
         }
+        //ignore the broadCast ipv4 packet
         if(BroadCast.equals(ethernetPacket.getDestinationMac().getValue())){
         	return;
         }
-        Socket socket=new Socket();
-        socket.setSrcMac(ethernetPacket.getSourceMac());
-        socket.setDestMac(ethernetPacket.getDestinationMac());
-        socket.setSrcAddress(ipv4Packet.getSourceIpv4());
-        socket.setDestAddress(ipv4Packet.getDestinationIpv4());
-        socket.setProtocol(ipv4Packet.getProtocol());
+        if(ipv4Packet.getProtocol()==KnownIpProtocols.Experimentation1)
+        	return;
+        //Construct the socket information
+        Socket socket=new Socket()
+        		.setSrcMac(ethernetPacket.getSourceMac())
+        		.setDestMac(ethernetPacket.getDestinationMac())
+        		.setSrcAddress(ipv4Packet.getSourceIpv4())
+        		.setDestAddress(ipv4Packet.getDestinationIpv4())
+        		.setProtocol(ipv4Packet.getProtocol());
         byte[] payload=packetReceived.getPayload();
-        if(ipv4Packet.getProtocol()==KnownIpProtocols.Tcp){
-        	
+        if(ipv4Packet.getProtocol()==KnownIpProtocols.Tcp){	
         	int bitOffset = ipv4Packet.getPayloadOffset() * NetUtils.NumBitsInAByte;
         	try {
-				int srcPort=BitBufferHelper.getInt(BitBufferHelper.getBits(payload, bitOffset, 16));
-				socket.setSrcPort(srcPort);
-				int destPort=BitBufferHelper.getInt(BitBufferHelper.getBits(payload, bitOffset+16, 16));
-				socket.setDestPort(destPort);
+        		socket.setSrcPort(BitBufferHelper.getInt(BitBufferHelper.getBits(payload, bitOffset, 16)))
+        			  .setDestPort(BitBufferHelper.getInt(BitBufferHelper.getBits(payload, bitOffset+16, 16)));
 			} catch (BufferException e) {
 				// TODO Auto-generated catch block
 				e.printStackTrace();
 			}
         }
-        else if(ipv4Packet.getProtocol()==KnownIpProtocols.Udp){
-        	int bitOffset = ipv4Packet.getPayloadOffset() * NetUtils.NumBitsInAByte;
-        	try {
-				int srcPort=BitBufferHelper.getInt(BitBufferHelper.getBits(payload, bitOffset, 16));
-				socket.setSrcPort(srcPort);
-				int destPort=BitBufferHelper.getInt(BitBufferHelper.getBits(payload, bitOffset+16, 16));
-				socket.setDestPort(destPort);
-			} catch (BufferException e) {
-				// TODO Auto-generated catch block
-				e.printStackTrace();
-			}
-        }
-        handlePacket(socket,payload);
-        	
+        handlePacket(socket,payload);        	
 	}
 	/**
 	 * 
@@ -162,8 +150,7 @@ public class PacketProcessor implements Ipv4PacketListener{
 	 * @param socket
 	 */
 	public void handlePacket(Socket socket,byte []payload){
-		service.execute(new Runnable() {
-			
+		service.execute(new Runnable() {		
 			@Override
 			public void run() {
 				// TODO Auto-generated method stub
@@ -183,15 +170,13 @@ public class PacketProcessor implements Ipv4PacketListener{
 		        List<Link> serverpath=serverRouter.getPath();
 		        List<NodeId> servernodes=serverRouter.getPathNode();
 		        NodeId branchNode=null;
-		        for(int i=servernodes.size()-1;i>=0;i--){
-		        	if(nodes.contains(servernodes.get(i))){
-		        		branchNode=servernodes.get(i);
-		        		break;
-		        	}
-		        }
 		        NodeConnectorId branchIngress=null;
  		        NodeConnectorId branchEgress1=null;
 		        NodeConnectorId branchEgress2=null;
+		        branchNode=findFocus(nodes, servernodes);
+		        if(branchNode==null){
+		        	return;
+		        }
 		        int index=0;
 		        for(Link link:path){
 		        	if(branchNode.equals(link.getDestination().getDestNode())){
@@ -218,16 +203,30 @@ public class PacketProcessor implements Ipv4PacketListener{
 		        if(branchIngress==null){
 		        	branchIngress=srcnodeconnector;
 		        }
-		        flowWriter.installFlow(socket, path, srcnodeconnector, dstnodeconnector, false);	
-		        if(socket.getProtocol()!=KnownIpProtocols.Tcp && socket.getProtocol()!=KnownIpProtocols.Udp){
-		        	return;
-		        }
+		        flowWriter.installFlow(socket, path, srcnodeconnector, dstnodeconnector,0,false);	
 		        flowWriter.installBranchFlow(socket, branchIngress, branchEgress1, branchEgress2, branchNode);
 		        if(branchEgress2!=serverNodeconnector){
-		        	flowWriter.installFlow(socket, serverpath, new NodeConnectorId(serverpath.get(index).getDestination().getDestTp().getValue()), serverNodeconnector, index+1, true,false);
+		        	flowWriter.installFlow(socket, serverpath, new NodeConnectorId(serverpath.get(index).getDestination().getDestTp().getValue()), serverNodeconnector, index+1, true);
 		        }		
 			}
 		});
+	}
+	/**
+	 * get the focus point of the two path
+	 * @param path1
+	 * @param path2
+	 * @return
+	 */
+	private NodeId findFocus(List<NodeId> path1,List<NodeId> path2){
+		NodeId nodeId=null;
+		for(int i=path2.size()-1;i>=0;i--){
+			if(path1.contains(path2.get(i))){
+				nodeId=path2.get(i);
+				return nodeId;
+			}
+		}
+		return nodeId;
+		
 	}
 
 }

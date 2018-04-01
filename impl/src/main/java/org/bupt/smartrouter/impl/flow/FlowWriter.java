@@ -17,6 +17,7 @@ import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.atomic.AtomicLong;
 
+import org.bupt.smartrouter.impl.packet.MatchLayer;
 import org.bupt.smartrouter.impl.packet.Socket;
 import org.bupt.smartrouter.impl.util.MyUtil;
 import org.opendaylight.controller.md.sal.binding.api.DataBroker;
@@ -182,102 +183,41 @@ public class FlowWriter {
 	 * @param egress
 	 * @param isTemp
 	 */
-	public void installFlow(Socket socket,List<Link> path,NodeConnectorId ingress,NodeConnectorId egress,boolean isTemp){
+	public void installFlow(Socket socket,List<Link> path,NodeConnectorId ingress,NodeConnectorId egress,int index,boolean isTemp){
+		NodeConnectorId inport=ingress;
+		NodeConnectorId reinport=egress;
+		MatchBuilder matchBuilder=buildMatch(socket, MatchLayer.L2, false);
+		MatchBuilder reMatchBuilder=buildMatch(socket, MatchLayer.L2, true);
 		//the ingress and egress on the same switch
-		MatchBuilder matchBuilder=new MatchBuilder()
-				.setEthernetMatch(new EthernetMatchBuilder()
-				.setEthernetSource(new EthernetSourceBuilder().setAddress(socket.getSrcMac()).build())
-				.setEthernetDestination(new EthernetDestinationBuilder().setAddress(socket.getDestMac()).build())
-				.setEthernetType(new EthernetTypeBuilder()
-				.setType(new EtherType(2048l))
-				.build())
-				.build())
-				.setIpMatch(new IpMatchBuilder()
-						.setIpProtocol((short)socket.getProtocol().getIntValue())
-						.build());
-		MatchBuilder reMatchBuilder=new MatchBuilder()
-				.setEthernetMatch(new EthernetMatchBuilder()
-				.setEthernetSource(new EthernetSourceBuilder().setAddress(socket.getDestMac()).build())
-				.setEthernetDestination(new EthernetDestinationBuilder().setAddress(socket.getSrcMac()).build())
-				.setEthernetType(new EthernetTypeBuilder()
-				.setType(new EtherType(2048l))
-				.build())
-				.build())
-				.setIpMatch(new IpMatchBuilder()
-						.setIpProtocol((short)socket.getProtocol().getIntValue())
-						.build());
 		if(MyUtil.inTheSameNode(ingress, egress)){
 			Match match=matchBuilder.setInPort(ingress).build();
 			Match reMatch=reMatchBuilder.setInPort(egress).build();
 			addInnerFlow(reMatch, MyUtil.getNodeId(egress), ingress, isTemp);
-			addInnerFlow(match,MyUtil.getNodeId(ingress),egress,isTemp);
-			
+			addInnerFlow(match,MyUtil.getNodeId(ingress),egress,isTemp);	
 			return;
 		}
-		NodeConnectorId inport=ingress;
-		NodeConnectorId reinport=egress;
-		for(int i=path.size()-1;i>=0;i--){
-			Link link=path.get(i);
-			Match reMatch=reMatchBuilder.setInPort(reinport).build();
-			addInnerFlow(reMatch,link.getDestination().getDestNode(),new NodeConnectorId(link.getDestination().getDestTp().getValue()), isTemp);
-			reinport=new NodeConnectorId(link.getSource().getSourceTp().getValue());
-		}
-		Match reMatch=reMatchBuilder.setInPort(reinport).build();
-		addInnerFlow(reMatch, path.get(0).getSource().getSourceNode(), ingress, isTemp);
-		if(path!=null){
-			for(Link link:path){
-				Match match=matchBuilder.setInPort(inport).build();
-				addInnerFlow(match,link.getSource().getSourceNode(),new NodeConnectorId(link.getSource().getSourceTp().getValue()), isTemp);
-				inport=new NodeConnectorId(link.getDestination().getDestTp().getValue());
-			}
-		}
 		if(path!=null && path.size()!=0){
-			Match match=matchBuilder.setInPort(inport).build();
-			addInnerFlow(match, path.get(path.size()-1).getDestination().getDestNode(),egress, isTemp);
-		}	
-	}
-	/**
-	 * 
-	 * @param socket
-	 * @param path
-	 * @param ingress
-	 * @param egress
-	 * @param index
-	 * @param isTemp
-	 * @param Bidirect
-	 */
-	public void installFlow(Socket socket,List<Link> path,NodeConnectorId ingress,NodeConnectorId egress,int index,boolean isTemp,boolean Bidirect){
-		//the ingress and egress on the same switch
-		//the ingress and egress on the same switch
-		MatchBuilder matchBuilder=new MatchBuilder()
-				.setEthernetMatch(new EthernetMatchBuilder()
-				.setEthernetSource(new EthernetSourceBuilder().setAddress(socket.getSrcMac()).build())
-				.setEthernetDestination(new EthernetDestinationBuilder().setAddress(socket.getDestMac()).build())
-				.setEthernetType(new EthernetTypeBuilder()
-				.setType(new EtherType(2048l))
-				.build())
-				.build())
-				.setIpMatch(new IpMatchBuilder()
-				.setIpProtocol((short)socket.getProtocol().getIntValue())
-				.build());
-		if(MyUtil.inTheSameNode(ingress, egress)){
-				Match match=matchBuilder.setInPort(ingress).build();
-				addInnerFlow(match,MyUtil.getNodeId(ingress),egress,isTemp);
-				return;
+			//install reverse flow
+			for(int i=path.size()-1;i>=index;i--){
+				Link link=path.get(i);
+				Match reMatch=reMatchBuilder.setInPort(reinport).build();
+				addInnerFlow(reMatch,link.getDestination().getDestNode(),new NodeConnectorId(link.getDestination().getDestTp().getValue()), isTemp);
+				reinport=new NodeConnectorId(link.getSource().getSourceTp().getValue());
 			}
-		NodeConnectorId inport=ingress;
-		if(path!=null){
+			//install flow on the last node
+			Match reMatch=reMatchBuilder.setInPort(reinport).build();
+			addInnerFlow(reMatch, path.get(0).getSource().getSourceNode(), ingress, isTemp);
+			//install flow 
 			for(int i=index;i<path.size();i++){
 				Link link=path.get(i);
 				Match match=matchBuilder.setInPort(inport).build();
 				addInnerFlow(match,link.getSource().getSourceNode(),new NodeConnectorId(link.getSource().getSourceTp().getValue()), isTemp);
 				inport=new NodeConnectorId(link.getDestination().getDestTp().getValue());
 			}
-		}
-		if(path!=null && path.size()!=0){
+			//install flow on the last node
 			Match match=matchBuilder.setInPort(inport).build();
-			addInnerFlow(match, path.get(path.size()-1).getDestination().getDestNode(),egress, isTemp);
-		}			
+			addInnerFlow(match, path.get(path.size()-1).getDestination().getDestNode(),egress, isTemp);		
+		}
 	}
 	/**
 	 * 
@@ -288,29 +228,9 @@ public class FlowWriter {
 	 * @param nodeId
 	 */
 	public void installBranchFlow(Socket socket,NodeConnectorId ingress,NodeConnectorId egress1,NodeConnectorId egress2,NodeId nodeId){
-		MatchBuilder matchBuilder=new MatchBuilder()
-				.setEthernetMatch(new EthernetMatchBuilder()
-				.setEthernetSource(new EthernetSourceBuilder().setAddress(socket.getSrcMac()).build())
-				.setEthernetDestination(new EthernetDestinationBuilder().setAddress(socket.getDestMac()).build())
-				.setEthernetType(new EthernetTypeBuilder()
-				.setType(new EtherType(2048l))
-				.build())
-				.build())
-				.setIpMatch(new IpMatchBuilder()
-				.setIpProtocol((short)socket.getProtocol().getIntValue())
-				.build());
-		 			
-		MatchBuilder reMatchBuilder=new MatchBuilder()
-				.setEthernetMatch(new EthernetMatchBuilder()
-				.setEthernetSource(new EthernetSourceBuilder().setAddress(socket.getDestMac()).build())
-				.setEthernetDestination(new EthernetDestinationBuilder().setAddress(socket.getSrcMac()).build())
-				.setEthernetType(new EthernetTypeBuilder()
-				.setType(new EtherType(2048l))
-				.build())
-				.build())
-				.setIpMatch(new IpMatchBuilder()
-				.setIpProtocol((short)socket.getProtocol().getIntValue())
-				.build());
+		socket.setProtocol(KnownIpProtocols.Tcp);
+		MatchBuilder matchBuilder=buildMatch(socket, MatchLayer.L3, false);
+		MatchBuilder reMatchBuilder=buildMatch(socket, MatchLayer.L3, true);
 		Match match=matchBuilder.setInPort(ingress).build();
 		addBranchFlow(match, egress1, egress2, nodeId);
 		Match revmatch=reMatchBuilder.setInPort(egress1).build();
@@ -325,74 +245,16 @@ public class FlowWriter {
 	 * @param queue
 	 */
 	public void installDispatchFlow(Socket socket,List<Link> path,NodeConnectorId ingress,NodeConnectorId egress,long queue){
-			MatchBuilder matchBuilder=new MatchBuilder()
-					.setEthernetMatch(new EthernetMatchBuilder()
-					.setEthernetSource(new EthernetSourceBuilder().setAddress(socket.getSrcMac()).build())
-					.setEthernetDestination(new EthernetDestinationBuilder().setAddress(socket.getDestMac()).build())
-					.setEthernetType(new EthernetTypeBuilder()
-					.setType(new EtherType(2048l))
-					.build())
-					.build())					
-					.setIpMatch(new IpMatchBuilder()
-					.setIpProtocol((short)socket.getProtocol().getIntValue())
-					.build())
-					.setLayer3Match(new Ipv4MatchBuilder()
-					.setIpv4Source(new Ipv4Prefix(socket.getSrcAddress().getValue()+"/32"))
-					.setIpv4Destination(new Ipv4Prefix(socket.getDestAddress().getValue()+"/32"))
-					.build());
-			MatchBuilder reMatchBuilder=new MatchBuilder()
-					.setEthernetMatch(new EthernetMatchBuilder()
-					.setEthernetSource(new EthernetSourceBuilder().setAddress(socket.getDestMac()).build())
-					.setEthernetDestination(new EthernetDestinationBuilder().setAddress(socket.getSrcMac()).build())
-					.setEthernetType(new EthernetTypeBuilder()
-					.setType(new EtherType(2048l))
-					.build())
-					.build())
-					.setIpMatch(new IpMatchBuilder()
-					.setIpProtocol((short)socket.getProtocol().getIntValue())
-					.build())
-					.setLayer3Match(new Ipv4MatchBuilder()
-					.setIpv4Source(new Ipv4Prefix(socket.getDestAddress().getValue()+"/32"))
-					.setIpv4Destination(new Ipv4Prefix(socket.getSrcAddress().getValue()+"/32"))
-					.build());
-			if(socket.getProtocol()==KnownIpProtocols.Tcp){
-				matchBuilder.setLayer4Match(new TcpMatchBuilder()
-							.setTcpSourcePort(new PortNumber(socket.getSrcPort()))
-							.setTcpDestinationPort(new PortNumber(socket.getDestPort()))
-							.build());
-				reMatchBuilder.setLayer4Match(new TcpMatchBuilder()
-							  .setTcpSourcePort(new PortNumber(socket.getDestPort()))
-							  .setTcpDestinationPort(new PortNumber(socket.getSrcPort()))
-							  .build());
-			}
-			else if (socket.getProtocol()==KnownIpProtocols.Udp) {
-				matchBuilder.setLayer4Match(new UdpMatchBuilder()
-						.setUdpSourcePort(new PortNumber(socket.getSrcPort()))
-						.setUdpDestinationPort(new PortNumber(socket.getDestPort()))
-						.build());
-				reMatchBuilder.setLayer4Match(new UdpMatchBuilder()
-						.setUdpSourcePort(new PortNumber(socket.getDestPort()))
-						.setUdpDestinationPort(new PortNumber(socket.getSrcPort()))
-						.build());
-			}
-			
+			MatchBuilder matchBuilder=buildMatch(socket, MatchLayer.L4, false);
+			MatchBuilder reMatchBuilder=buildMatch(socket, MatchLayer.L4, true);
+			NodeConnectorId inport=ingress;
+			NodeConnectorId reinport=egress;
 			if(MyUtil.inTheSameNode(ingress, egress)){
 				Match match=matchBuilder.setInPort(ingress).build();
 				Match reMatch=reMatchBuilder.setInPort(egress).build();
 				addDispatchFlow(match, egress, queue, MyUtil.getNodeId(ingress));
 				addDispatchFlow(reMatch, ingress, queue, MyUtil.getNodeId(ingress));
 				return;
-			}
-			NodeConnectorId inport=ingress;
-			NodeConnectorId reinport=egress;
-			if(path!=null && path.size()!=0){
-				for(Link link:path){
-					Match match=matchBuilder.setInPort(inport).build();
-					addDispatchFlow(match, new NodeConnectorId(link.getSource().getSourceTp().getValue()), queue,link.getSource().getSourceNode());
-					inport=new NodeConnectorId(link.getDestination().getDestTp().getValue());
-				}
-				Match match=matchBuilder.setInPort(inport).build();
-				addDispatchFlow(match, egress, queue,path.get(path.size()-1).getDestination().getDestNode());
 			}
 			if(path!=null && path.size()!=0){
 				for(int i=path.size()-1;i>=0;i--){
@@ -403,23 +265,21 @@ public class FlowWriter {
 				}
 				Match reMatch=reMatchBuilder.setInPort(reinport).build();
 				addDispatchFlow(reMatch, ingress, queue, path.get(0).getSource().getSourceNode());
-			}
-			
+				for(Link link:path){
+					Match match=matchBuilder.setInPort(inport).build();
+					addDispatchFlow(match, new NodeConnectorId(link.getSource().getSourceTp().getValue()), queue,link.getSource().getSourceNode());
+					inport=new NodeConnectorId(link.getDestination().getDestTp().getValue());
+				}
+				Match match=matchBuilder.setInPort(inport).build();
+				addDispatchFlow(match, egress, queue,path.get(path.size()-1).getDestination().getDestNode());
+			}		
 	}
 	
 	public void addInnerFlow(Match match,NodeId nodeId,NodeConnectorId egress,boolean isTemp){
 		writeFlowToSwitch(nodeId, creatOutPutFlow(match, egress,isTemp));
 	}
-	
 	public void addBranchFlow(Match match,NodeConnectorId egress1,NodeConnectorId egress2,NodeId nodeId){
-		Future<RpcResult<AddFlowOutput>> result=writeFlowToSwitch(nodeId, createBranchFlow(match, egress1, egress2));
-		try {
-			RpcResult< AddFlowOutput> r=result.get();
-			r.getResult();
-		} catch (InterruptedException | ExecutionException e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
-		}
+		writeFlowToSwitch(nodeId, createBranchFlow(match, egress1, egress2));
 	}
 	public void addDispatchFlow(Match match,NodeConnectorId egress,long queue,NodeId nodeId){
 		writeFlowToSwitch(nodeId, creatDispatchFlow(match, egress, queue));
@@ -568,6 +428,52 @@ public class FlowWriter {
 					.setPriority(tempFlowPriority);
 		return flowBuilder.build();	
 	}
+	/**
+	 * build match for the socket ,reverse=true means fanzhuan socket
+	 * @param socket
+	 * @param matchLayer
+	 * @param reverse
+	 * @return
+	 */
+	private MatchBuilder buildMatch(Socket socket,MatchLayer matchLayer,boolean reverse){
+		if(socket==null){
+			return null;
+		}
+		MatchBuilder builder=new MatchBuilder();
+		Socket matchSocket;
+		if(!reverse)
+			matchSocket=socket;
+		else
+			matchSocket=socket.reverse();
+			builder.setEthernetMatch(new EthernetMatchBuilder()
+					.setEthernetSource(new EthernetSourceBuilder().setAddress(matchSocket.getSrcMac()).build())
+					.setEthernetDestination(new EthernetDestinationBuilder().setAddress(matchSocket.getDestMac()).build())
+					.setEthernetType(new EthernetTypeBuilder()
+					.setType(new EtherType(2048l))
+					.build())
+					.build());
+			if(matchLayer==MatchLayer.L3 || matchLayer==MatchLayer.L4){
+				if(matchSocket.getSrcAddress()==null || matchSocket.getDestAddress()==null || matchSocket.getProtocol()==null){
+					return null;
+				}
+				builder.setIpMatch(new IpMatchBuilder()
+						.setIpProtocol((short)matchSocket.getProtocol().getIntValue())
+						.build())
+						.setLayer3Match(new Ipv4MatchBuilder()
+						.setIpv4Source(new Ipv4Prefix(matchSocket.getSrcAddress().getValue()+"/32"))
+						.setIpv4Destination(new Ipv4Prefix(matchSocket.getDestAddress().getValue()+"/32"))
+						.build());
+			}
+			if(matchLayer==MatchLayer.L4){
+				builder.setLayer4Match(new TcpMatchBuilder()
+						.setTcpSourcePort(new PortNumber(matchSocket.getSrcPort()))
+						.setTcpDestinationPort(new PortNumber(matchSocket.getDestPort()))
+						.build());		
+			}
+		return builder;
+	}
+	
+	
 	
     /**
      * Starts and commits data change transaction which modifies provided
@@ -581,7 +487,6 @@ public class FlowWriter {
                 .<Table, TableKey>child(Table.class, new TableKey(flowTableId));
         InstanceIdentifier<Flow> flowPath = tableInstanceId.<Flow, FlowKey>child(Flow.class,
                 new FlowKey(new FlowId(FLOW_ID_PREFIX+String.valueOf(flowIdInc.getAndIncrement()))));
-
         final AddFlowInputBuilder builder = new AddFlowInputBuilder(flow).setNode(new NodeRef(nodeInstanceId))
                 .setFlowTable(new FlowTableRef(tableInstanceId)).setFlowRef(new FlowRef(flowPath))
                 .setTransactionUri(new Uri(flow.getId().getValue()));

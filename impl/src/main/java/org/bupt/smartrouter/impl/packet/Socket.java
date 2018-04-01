@@ -22,45 +22,69 @@ public class Socket {
 	public KnownIpProtocols getProtocol() {
 		return protocol;
 	}
-	public void setProtocol(KnownIpProtocols protocol) {
+	public Socket setProtocol(KnownIpProtocols protocol) {
 		this.protocol = protocol;
+		return this;
 	}
 	public MacAddress getSrcMac() {
 		return srcMac;
 	}
-	public void setSrcMac(MacAddress srcMac) {
+	public Socket setSrcMac(MacAddress srcMac) {
 		this.srcMac = srcMac;
+		return this;
 	}
 	public MacAddress getDestMac() {
 		return destMac;
 	}
-	public void setDestMac(MacAddress destMac) {
+	public Socket setDestMac(MacAddress destMac) {
 		this.destMac = destMac;
+		return this;
 	}
 	public Ipv4Address getSrcAddress() {
 		return srcAddress;
 	}
-	public void setSrcAddress(Ipv4Address srcAddress) {
+	public Socket setSrcAddress(Ipv4Address srcAddress) {
 		this.srcAddress = srcAddress;
+		return this;
 	}
 	public Ipv4Address getDestAddress() {
 		return destAddress;
 	}
-	public void setDestAddress(Ipv4Address destAddress) {
+	public Socket setDestAddress(Ipv4Address destAddress) {
 		this.destAddress = destAddress;
+		return this;
 	}
 	public int getSrcPort() {
 		return srcPort;
 	}
-	public void setSrcPort(int srcPort) {
+	public Socket setSrcPort(int srcPort) {
 		this.srcPort = srcPort;
+		return this;
 	}
 	public int getDestPort() {
 		return destPort;
 	}
-	public void setDestPort(int destPort) {
+	public Socket setDestPort(int destPort) {
 		this.destPort = destPort;
+		return this;
 	}
+	/**
+	 * reverse the socket
+	 * @return
+	 */
+	public Socket reverse(){
+		Socket socket=new Socket();
+		socket.setSrcMac(this.destMac)
+			  .setDestMac(this.srcMac)
+			  .setSrcAddress(this.destAddress)
+			  .setDestAddress(this.srcAddress)
+			  .setProtocol(this.protocol)
+			  .setSrcPort(this.destPort)
+			  .setDestPort(this.srcPort);
+		return socket;
+	}
+	
+	
 	@Override
 	public int hashCode() {
 		final int prime = 31;

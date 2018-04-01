@@ -8,12 +8,22 @@
 package org.bupt.smartrouter.impl.packet;
 
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
-
 import org.bupt.smartrouter.impl.flow.FlowWriter;
 import org.bupt.smartrouter.impl.topo.RouterInfo;
 import org.bupt.smartrouter.impl.topo.TopoGraph;
 import org.bupt.smartrouter.impl.util.MyUtil;
+import org.opendaylight.controller.md.sal.binding.api.DataBroker;
+import org.opendaylight.controller.md.sal.binding.api.DataChangeListener;
+import org.opendaylight.controller.md.sal.binding.api.ReadOnlyTransaction;
+import org.opendaylight.controller.md.sal.common.api.data.AsyncDataChangeEvent;
+import org.opendaylight.controller.md.sal.common.api.data.LogicalDatastoreType;
+import org.opendaylight.controller.md.sal.common.api.data.ReadFailedException;
+import org.opendaylight.controller.md.sal.common.api.data.AsyncDataBroker.DataChangeScope;
 import org.opendaylight.l2switch.packethandler.decoders.utils.BitBufferHelper;
 import org.opendaylight.l2switch.packethandler.decoders.utils.BufferException;
 import org.opendaylight.l2switch.packethandler.decoders.utils.NetUtils;
@@ -33,11 +43,22 @@ import org.opendaylight.yang.gen.v1.urn.opendaylight.packet.ipv4.rev140528.ipv4.
 import org.opendaylight.yang.gen.v1.urn.opendaylight.packet.service.rev130709.PacketProcessingService;
 import org.opendaylight.yang.gen.v1.urn.opendaylight.packet.service.rev130709.TransmitPacketInput;
 import org.opendaylight.yang.gen.v1.urn.opendaylight.packet.service.rev130709.TransmitPacketInputBuilder;
+import org.opendaylight.yang.gen.v1.urn.opendaylight.params.xml.ns.yang.smartrouter.rev150105.TrafficRequirments;
+import org.opendaylight.yang.gen.v1.urn.opendaylight.params.xml.ns.yang.smartrouter.rev150105.traffic_requirments.Requirements;
 import org.opendaylight.yang.gen.v1.urn.tbd.params.xml.ns.yang.network.topology.rev131021.NodeId;
 import org.opendaylight.yang.gen.v1.urn.tbd.params.xml.ns.yang.network.topology.rev131021.network.topology.topology.Link;
+import org.opendaylight.yangtools.yang.binding.DataObject;
 import org.opendaylight.yangtools.yang.binding.InstanceIdentifier;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
-public class DispatchPacketProcessor implements Ipv4PacketListener{
+import com.google.common.base.Optional;
+import com.google.common.util.concurrent.CheckedFuture;
+
+public class DispatchPacketProcessor implements Ipv4PacketListener,DataChangeListener{
+	private final DataBroker dataBroker;
+	private static final Logger LOGGER=LoggerFactory.getLogger(DispatchPacketProcessor.class);
+	private Map<String, Requirements> requirementMap=new ConcurrentHashMap<>();;
 	private final NodeConnectorId serverNodeConnector;
 	private final TopoGraph topoGraph;
 	private final FlowWriter flowWriter;
@@ -49,20 +70,41 @@ public class DispatchPacketProcessor implements Ipv4PacketListener{
 	public void setService(ExecutorService service) {
 		this.service = service;
 	}
-	public DispatchPacketProcessor(final NodeConnectorId serverNodeConnector, final TopoGraph topoGraph, final FlowWriter flowWriter) {
-		super();
-		this.serverNodeConnector = serverNodeConnector;
-		this.topoGraph = topoGraph;
-		this.flowWriter = flowWriter;
-		this.packetProcessingService=packetProcessingService;
-	}
-	
 	public PacketProcessingService getPacketProcessingService() {
 		return packetProcessingService;
 	}
 	public void setPacketProcessingService(PacketProcessingService packetProcessingService) {
 		this.packetProcessingService = packetProcessingService;
 	}
+	public DispatchPacketProcessor(final DataBroker dataBroker,final NodeConnectorId serverNodeConnector, final TopoGraph topoGraph, final FlowWriter flowWriter) {
+		super();
+		this.dataBroker=dataBroker;
+		this.serverNodeConnector = serverNodeConnector;
+		this.topoGraph = topoGraph;
+		this.flowWriter = flowWriter;
+	}
+	public void initMap(){
+		TrafficRequirments trafficRequirments;
+		ReadOnlyTransaction rx=dataBroker.newReadOnlyTransaction();
+		InstanceIdentifier<TrafficRequirments> ii=InstanceIdentifier.builder(TrafficRequirments.class).build();
+		try {
+			Optional<TrafficRequirments> optional=rx.read(LogicalDatastoreType.CONFIGURATION, ii).get();
+			if(optional.isPresent()){
+				trafficRequirments=optional.get();
+				for(Requirements requirements:trafficRequirments.getRequirements()){
+					requirementMap.put(requirements.getName(), requirements);
+				}
+			}
+			
+		} catch (InterruptedException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		} catch (ExecutionException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+	}
+
 	@Override
 	public void onIpv4PacketReceived(Ipv4PacketReceived packetReceived) {
 		// TODO Auto-generated method stub
@@ -81,6 +123,8 @@ public class DispatchPacketProcessor implements Ipv4PacketListener{
         if (rawPacket == null || ethernetPacket == null || ipv4Packet == null) {
             return;
         }
+        if(ipv4Packet.getProtocol()==KnownIpProtocols.Experimentation1)
+        	return;
         if(!serverNodeConnector.equals(rawPacket.getIngress().getValue().firstKeyOf(NodeConnector.class).getId())){
         	return;
         }
@@ -127,16 +171,22 @@ public class DispatchPacketProcessor implements Ipv4PacketListener{
 	 * @param dscp
 	 */
 	public void handlerSocket(byte[] payload,Socket socket,Dscp dscp){
+		Requirements requirement;
+		requirement=requirementMap.get(dscp.getValue().toString());
+		if(requirement==null){
+			LOGGER.debug("no matched requirement find");
+			return;
+		}
 		NodeConnectorId srcnodeconnector=topoGraph.getAttachPoint(socket.getSrcMac());
 	 	NodeConnectorId dstnodeconnector=topoGraph.getAttachPoint(socket.getDestMac());
         if(srcnodeconnector==null ||dstnodeconnector==null)
         	return;
         NodeId src=MyUtil.getNodeId(srcnodeconnector);
-        NodeId dst=MyUtil.getNodeId(dstnodeconnector);
-        RouterInfo routerInfo=topoGraph.getRouterInfo(src, dst);
+        NodeId dst=MyUtil.getNodeId(dstnodeconnector);  
+        RouterInfo routerInfo=topoGraph.getRouterInfo(src, dst,requirement);
         List<Link> path=routerInfo.getPath();
         sendPacketOut(payload, MyUtil.getRef(srcnodeconnector), MyUtil.getRef(dstnodeconnector));
-        flowWriter.installDispatchFlow(socket, path, srcnodeconnector, dstnodeconnector,dscp.getValue());
+        flowWriter.installDispatchFlow(socket, path, srcnodeconnector, dstnodeconnector,requirement.getPriority());
 	}
 	
 	public void sendPacketOut(byte[] payload,NodeConnectorRef ingress,NodeConnectorRef egress){
@@ -151,6 +201,44 @@ public class DispatchPacketProcessor implements Ipv4PacketListener{
 				.setPayload(payload)
 				.build();
 		packetProcessingService.transmitPacket(input);
+	}
+	
+	public void registerAsDataChangerListener(){
+		InstanceIdentifier<Requirements> identifier=InstanceIdentifier.builder(TrafficRequirments.class)
+				.child(Requirements.class)
+				.build();
+		dataBroker.registerDataChangeListener(LogicalDatastoreType.CONFIGURATION, identifier, this,DataChangeScope.BASE);
+		
+	}
+	@Override
+	public void onDataChanged(AsyncDataChangeEvent<InstanceIdentifier<?>, DataObject> change) {
+		// TODO Auto-generated method stub
+		if(change==null){
+			return;
+		}
+		Map<InstanceIdentifier<?>, DataObject> created=change.getCreatedData();
+		Set<InstanceIdentifier<?>> keySet=created.keySet();
+		if(keySet!=null && !keySet.isEmpty()){
+			for(InstanceIdentifier<?> ii:keySet){
+				if(Requirements.class.isAssignableFrom(ii.getTargetType())){
+					InstanceIdentifier<Requirements> reIdentifier=(InstanceIdentifier<Requirements> )ii;
+					ReadOnlyTransaction rx=dataBroker.newReadOnlyTransaction();
+					CheckedFuture<Optional<Requirements>, ReadFailedException> future=rx.read(LogicalDatastoreType.CONFIGURATION,reIdentifier);;
+					try {
+						Optional<Requirements> optional=future.get();
+						if(optional.isPresent()){
+							Requirements requirements=optional.get();
+							requirementMap.put(requirements.getName(), requirements);
+						}
+					} catch (InterruptedException | ExecutionException e) {
+						// TODO Auto-generated catch block
+						e.printStackTrace();
+					}
+					
+				}
+			}
+		}
+		
 	}
 
 }

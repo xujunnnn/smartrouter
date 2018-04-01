@@ -104,11 +104,20 @@ and is available at http://www.eclipse.org/legal/epl-v10.html
       <artifactId>junit</artifactId>
       <scope>test</scope>
     </dependency>
-
     <dependency>
       <groupId>org.mockito</groupId>
       <artifactId>mockito-core</artifactId>
       <scope>test</scope>
     </dependency>
+    <dependency>
+    	<groupId>org.bupt</groupId>
+  		<artifactId>BWCollector-api</artifactId>
+  		<version>0.1.0-SNAPSHOT</version>
+   </dependency>
+   <dependency>
+  	<groupId>org.bupt</groupId>
+  	<artifactId>delaycollector-api</artifactId>
+  	<version>0.1.0-SNAPSHOT</version>
+   </dependency>
   </dependencies>
 </project>

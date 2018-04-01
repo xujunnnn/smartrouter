@@ -6,4 +6,23 @@ module smartrouter {
     revision "2015-01-05" {
         description "Initial revision of smartrouter model";
     }
+    container Traffic_Requirments{
+    	list requirements{
+    		key "name";
+    		leaf name{
+    			type string;
+    		}
+    		leaf BW{
+    			type uint32;
+    		}
+    		leaf delay{
+    			type uint32;
+    		}
+    		leaf priority{
+    			type uint8;
+    		}
+    		
+    	}
+    	
+    }
 }
