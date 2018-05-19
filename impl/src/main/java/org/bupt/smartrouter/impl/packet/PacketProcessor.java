@@ -35,6 +35,7 @@ import org.opendaylight.yang.gen.v1.urn.tbd.params.xml.ns.yang.network.topology.
 import org.opendaylight.yang.gen.v1.urn.tbd.params.xml.ns.yang.network.topology.rev131021.network.topology.topology.Link;
 import org.opendaylight.yangtools.yang.binding.InstanceIdentifier;
 public class PacketProcessor implements Ipv4PacketListener{
+	private DispatchPacketProcessor dispatchPacketProcessor;
 	private ExecutorService service;
 	private final FlowWriter flowWriter;
 	private final TopoGraph topoGraph;
@@ -49,6 +50,17 @@ public class PacketProcessor implements Ipv4PacketListener{
 		this.topoGraph = topoGraph;
 	}
 	
+	
+	public DispatchPacketProcessor getDispatchPacketProcessor() {
+		return dispatchPacketProcessor;
+	}
+
+
+	public void setDispatchPacketProcessor(DispatchPacketProcessor dispatchPacketProcessor) {
+		this.dispatchPacketProcessor = dispatchPacketProcessor;
+	}
+
+
 	public PacketProcessingService getPacketProcessingService() {
 		return packetProcessingService;
 	}
@@ -100,31 +112,22 @@ public class PacketProcessor implements Ipv4PacketListener{
         if (rawPacket == null || ethernetPacket == null || ipv4Packet == null) {
             return;
         }
-        //ignore the broadCast ipv4 packet
-        if(BroadCast.equals(ethernetPacket.getDestinationMac().getValue())){
-        	return;
-        }
         if(ipv4Packet.getProtocol()==KnownIpProtocols.Experimentation1)
         	return;
-        //Construct the socket information
-        Socket socket=new Socket()
-        		.setSrcMac(ethernetPacket.getSourceMac())
-        		.setDestMac(ethernetPacket.getDestinationMac())
-        		.setSrcAddress(ipv4Packet.getSourceIpv4())
-        		.setDestAddress(ipv4Packet.getDestinationIpv4())
-        		.setProtocol(ipv4Packet.getProtocol());
-        byte[] payload=packetReceived.getPayload();
-        if(ipv4Packet.getProtocol()==KnownIpProtocols.Tcp){	
-        	int bitOffset = ipv4Packet.getPayloadOffset() * NetUtils.NumBitsInAByte;
-        	try {
-        		socket.setSrcPort(BitBufferHelper.getInt(BitBufferHelper.getBits(payload, bitOffset, 16)))
-        			  .setDestPort(BitBufferHelper.getInt(BitBufferHelper.getBits(payload, bitOffset+16, 16)));
-			} catch (BufferException e) {
-				// TODO Auto-generated catch block
-				e.printStackTrace();
-			}
-        }
-        handlePacket(socket,payload);        	
+	        //Construct the socket information
+		Socket socket=Socket.getSocket(ethernetPacket,ipv4Packet,packetReceived);
+		handlePacket(socket, packetReceived.getPayload());
+//		try {
+//			Thread.sleep(5000);
+//		} catch (InterruptedException e) {
+//			// TODO Auto-generated catch block
+//			e.printStackTrace();
+//		}
+//		if(ipv4Packet.getProtocol()==KnownIpProtocols.Tcp){
+//			socket.setDscp(1);
+//			dispatchPacketProcessor.handlerSocket(packetReceived.getPayload(), socket);
+//		}
+//		
 	}
 	/**
 	 * 
@@ -204,7 +207,9 @@ public class PacketProcessor implements Ipv4PacketListener{
 		        	branchIngress=srcnodeconnector;
 		        }
 		        flowWriter.installFlow(socket, path, srcnodeconnector, dstnodeconnector,0,false);	
-		        flowWriter.installBranchFlow(socket, branchIngress, branchEgress1, branchEgress2, branchNode);
+		        if(socket.getProtocol()==KnownIpProtocols.Tcp){
+		        	flowWriter.installBranchFlow(socket, branchIngress, branchEgress1, branchEgress2, branchNode);
+		        }
 		        if(branchEgress2!=serverNodeconnector){
 		        	flowWriter.installFlow(socket, serverpath, new NodeConnectorId(serverpath.get(index).getDestination().getDestTp().getValue()), serverNodeconnector, index+1, true);
 		        }		

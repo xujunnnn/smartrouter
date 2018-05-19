@@ -175,14 +175,7 @@ public class FlowWriter {
 	public void setFlowIdInc(AtomicLong flowIdInc) {
 		this.flowIdInc = flowIdInc;
 	}
-	/**
-	 * 
-	 * @param socket
-	 * @param path
-	 * @param ingress
-	 * @param egress
-	 * @param isTemp
-	 */
+	
 	public void installFlow(Socket socket,List<Link> path,NodeConnectorId ingress,NodeConnectorId egress,int index,boolean isTemp){
 		NodeConnectorId inport=ingress;
 		NodeConnectorId reinport=egress;
@@ -452,6 +445,9 @@ public class FlowWriter {
 					.setType(new EtherType(2048l))
 					.build())
 					.build());
+			builder.setIpMatch(new IpMatchBuilder()
+						.setIpProtocol((short)matchSocket.getProtocol().getIntValue())
+						.build());
 			if(matchLayer==MatchLayer.L3 || matchLayer==MatchLayer.L4){
 				if(matchSocket.getSrcAddress()==null || matchSocket.getDestAddress()==null || matchSocket.getProtocol()==null){
 					return null;

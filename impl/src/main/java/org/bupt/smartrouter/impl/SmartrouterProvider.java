@@ -74,6 +74,7 @@ public class SmartrouterProvider {
         topoGraph.updateTopo();
         PacketProcessor packetProcessor=new PacketProcessor(flowWriter, topoGraph);
         packetProcessor.setServerNode(new NodeId(config.getServerNode()));
+      
         packetProcessor.setServerNodeconnector(new NodeConnectorId(config.getServerNodeConnector()));
         packetProcessor.setService(service);
         packetProcessor.setPacketProcessingService(packetProcessingService);
@@ -82,6 +83,7 @@ public class SmartrouterProvider {
         dispatchPacketProcessor.registerAsDataChangerListener();
         dispatchPacketProcessor.setPacketProcessingService(packetProcessingService);
         packetProcessor.setService(service);
+        packetProcessor.setDispatchPacketProcessor(dispatchPacketProcessor);
         listenerRegistration=notificationService.registerNotificationListener(packetProcessor);
         listenerRegistration2=notificationService.registerNotificationListener(dispatchPacketProcessor);
     }

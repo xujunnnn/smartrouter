@@ -13,6 +13,9 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
+
+import javax.swing.SortingFocusTraversalPolicy;
+
 import org.bupt.smartrouter.impl.flow.FlowWriter;
 import org.bupt.smartrouter.impl.topo.RouterInfo;
 import org.bupt.smartrouter.impl.topo.TopoGraph;
@@ -83,6 +86,9 @@ public class DispatchPacketProcessor implements Ipv4PacketListener,DataChangeLis
 		this.topoGraph = topoGraph;
 		this.flowWriter = flowWriter;
 	}
+	/**
+	 * init the requirement map
+	 */
 	public void initMap(){
 		TrafficRequirments trafficRequirments;
 		ReadOnlyTransaction rx=dataBroker.newReadOnlyTransaction();
@@ -104,7 +110,9 @@ public class DispatchPacketProcessor implements Ipv4PacketListener,DataChangeLis
 			e.printStackTrace();
 		}
 	}
-
+	/**
+	 * handle packet received
+	 */
 	@Override
 	public void onIpv4PacketReceived(Ipv4PacketReceived packetReceived) {
 		// TODO Auto-generated method stub
@@ -125,54 +133,20 @@ public class DispatchPacketProcessor implements Ipv4PacketListener,DataChangeLis
         }
         if(ipv4Packet.getProtocol()==KnownIpProtocols.Experimentation1)
         	return;
-        if(!serverNodeConnector.equals(rawPacket.getIngress().getValue().firstKeyOf(NodeConnector.class).getId())){
-        	return;
-        }
-        Socket socket=new Socket();
-        socket.setSrcMac(ethernetPacket.getSourceMac());
-        socket.setDestMac(ethernetPacket.getDestinationMac());
-        socket.setSrcAddress(ipv4Packet.getSourceIpv4());
-        socket.setDestAddress(ipv4Packet.getDestinationIpv4());
-        if(ipv4Packet.getProtocol()==KnownIpProtocols.Tcp){
-        	socket.setProtocol(KnownIpProtocols.Tcp);
-        	byte[] payload=packetReceived.getPayload();
-        	int bitOffset = ipv4Packet.getPayloadOffset() * NetUtils.NumBitsInAByte;
-        	try {
-				int srcPort=BitBufferHelper.getInt(BitBufferHelper.getBits(payload, bitOffset, 16));
-				socket.setSrcPort(srcPort);
-				int destPort=BitBufferHelper.getInt(BitBufferHelper.getBits(payload, bitOffset+16, 16));
-				socket.setDestPort(destPort);
-				handlerSocket(payload,socket, ipv4Packet.getDscp());
-			} catch (BufferException e) {
-				// TODO Auto-generated catch block
-				e.printStackTrace();
-			}
-        	
-        }
-        else if(ipv4Packet.getProtocol()==KnownIpProtocols.Udp){
-        	socket.setProtocol(KnownIpProtocols.Udp);
-        	byte[] payload=packetReceived.getPayload();
-        	int bitOffset = ipv4Packet.getPayloadOffset() * NetUtils.NumBitsInAByte;
-        	try {
-				int srcPort=BitBufferHelper.getInt(BitBufferHelper.getBits(payload, bitOffset, 16));
-				socket.setSrcPort(srcPort);
-				int destPort=BitBufferHelper.getInt(BitBufferHelper.getBits(payload, bitOffset+16, 16));
-				socket.setDestPort(destPort);
-				handlerSocket(payload,socket, ipv4Packet.getDscp());
-			} catch (BufferException e) {
-				// TODO Auto-generated catch block
-				e.printStackTrace();
-			}
-        }
+//        if(!serverNodeConnector.equals(rawPacket.getIngress().getValue().firstKeyOf(NodeConnector.class).getId())){
+//        	return;
+//        }
+        Socket socket=Socket.getSocket(ethernetPacket, ipv4Packet, packetReceived);
+        handlerSocket(packetReceived.getPayload(), socket);
 	}
 	/**
 	 * 
 	 * @param socket
 	 * @param dscp
 	 */
-	public void handlerSocket(byte[] payload,Socket socket,Dscp dscp){
+	public void handlerSocket(byte[] payload,Socket socket){
 		Requirements requirement;
-		requirement=requirementMap.get(dscp.getValue().toString());
+		requirement=requirementMap.get(String.valueOf(socket.getDscp()));
 		if(requirement==null){
 			LOGGER.debug("no matched requirement find");
 			return;
